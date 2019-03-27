@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans" 
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    
+    
+    
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8085" doc:name="HTTP Listener Configuration"/>
+    <db:mysql-config name="MySQL_Configuration" host="localhost" port="3306" user="root" password="root" database="test_db" doc:name="MySQL Configuration"/>
+    <db:template-query name="Template_Query" doc:name="Template Query">
+        <db:parameterized-query><![CDATA[select * from t_customers where city = :CITY]]></db:parameterized-query>
+        <db:in-param name="CITY" defaultValue="Bangalore"/>
+
+    </db:template-query>
+    
+    
+    
+    <flow name="getCustomersFlow">
+        <set-variable variableName="city" value="#[(message.inboundProperties.'http.query.params'.city != empty) ? message.inboundProperties.'http.query.params'.city : &quot;Bangalore&quot;]" doc:name="Flow Variable city"/>
+
+        <db:select config-ref="MySQL_Configuration" doc:name="Database">
+            <db:template-query-ref name="Template_Query"/>
+            <db:in-param name="CITY" value="#[city]"/>
+        </db:select>
+        <dw:transform-message doc:name="Transform Message" metadata:id="0ddfc6ad-9e1a-4764-b35c-afb1cfcf3e05">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload map ((payload01 , indexOfPayload01) -> {
+    customerId: payload01.id,
+    email: payload01.email,
+    fullName: payload01.name,
+    phoneNumber: payload01.phhoneNumber,
+    addressLine1: payload01.addressLine1,
+    addressLine2: payload01.addressLine2,
+    city: payload01.city,
+    state: payload01.state,
+    pincode: payload01.postalCode as :number
+})]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="Request has been processed.  Payload is:  #[payload]   IBPs: #[message.inboundProperties] OBPs: #[message.outboundProperties] " level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="getCustomersByIDFlow">
+
+        <set-variable variableName="customerId" value="#[message.inboundProperties.'http.uri.params'.customer_id]" doc:name="Flow Variable city"/>
+        <db:select config-ref="MySQL_Configuration" doc:name="Database">
+            <db:parameterized-query><![CDATA[select * from t_customers where id = #[customerId]]]></db:parameterized-query>
+        </db:select>
+        <dw:transform-message doc:name="Transform Message" metadata:id="0ddfc6ad-9e1a-4764-b35c-afb1cfcf3e05">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload map ((payload01 , indexOfPayload01) -> {
+    customerId: payload01.id,
+    email: payload01.email,
+    fullName: payload01.name,
+    phoneNumber: payload01.phhoneNumber,
+    addressLine1: payload01.addressLine1,
+    addressLine2: payload01.addressLine2,
+    city: payload01.city,
+    state: payload01.state,
+    pincode: payload01.postalCode as :number
+})]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="Request has been processed.  Payload is:  #[payload]   IBPs: #[message.inboundProperties] OBPs: #[message.outboundProperties] " level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="deleteCustomersByIDFlow">
+        <set-variable variableName="customerId" value="#[message.inboundProperties.'http.uri.params'.customer_id]" doc:name="Variable"/>
+        <db:delete config-ref="MySQL_Configuration" doc:name="Database">
+            <db:parameterized-query><![CDATA[delete from t_customers where id = #[customerId]]]></db:parameterized-query>
+        </db:delete>
+        <choice doc:name="Choice">
+            <when expression="#[payload &gt;0]">
+                <set-payload value="{
+	&quot;message&quot; : &quot;Customer with id #[message.inboundProperties.'http.uri.params'.customer_id] has been deleted&quot;
+}" mimeType="application/json" doc:name="Set Payload for Success"/>
+            </when>
+            <otherwise>
+                <set-payload value="{
+	&quot;message&quot; : &quot;Customer with id #[message.inboundProperties.'http.uri.params'.customer_id] has not been deleted as id not found&quot;
+}" mimeType="application/json" doc:name="Set Payload For Id Not Found"/>
+                <set-property propertyName="http.status" value="404" doc:name="Property"/>
+            </otherwise>
+        </choice>
+    </flow>
+    <flow name="postCustomesByID">
+        <dw:transform-message doc:name="Transform Message" metadata:id="af2ca6ec-e236-4d4e-bf6c-c6b9c5e90c5c">
+            <dw:input-payload mimeType="application/json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	id: payload.customerId,
+	name: payload.fullName,
+	email: payload.email,
+	phNumber: payload.phoneNumber,
+	addLine1: payload.addressLine1,
+	addLine2: payload.addressLine2,
+	city: payload.city,
+	state: payload.state,
+	postalCode: payload.pincode
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <enricher source="#[payload]" target="#[flowVars.dboutput]" doc:name="ME">
+            <db:insert config-ref="MySQL_Configuration" doc:name="Database">
+                <db:parameterized-query><![CDATA[insert into t_customers (id,email,name,phhoneNumber,addressLine1,addressLine2,city,state,postalCode) values (#[payload.id],#[payload.email],#[payload.name],#[payload.phNumber],#[payload.addLine1],#[payload.addLine2],#[payload.city],#[payload.state],#[payload.postalCode])]]></db:parameterized-query>
+            </db:insert>
+        </enricher>
+        <set-payload value="{
+	&quot;message&quot; : &quot;Customer with name #[payload.name] has been inserted&quot;
+}" doc:name="Set Payload"/>
+    </flow>
+</mule>

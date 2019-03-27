@@ -1,0 +1,101 @@
+#%RAML 1.0
+version: v2
+baseUri: https://anypoint.mulesoft.com/mocking/api/v1/links/cf2fd329-8573-47e1-a5a7-96c97e17bb47/ # 
+title: Customers API
+
+types:
+  Customer: !include DataType/CustomerDataType.raml
+
+traits:
+  cust_auth:
+    headers:
+      client_id:
+        required:  true
+        type: string
+      client_secret:
+        required:  true
+        type: string
+  auth_failed_status:
+    responses:
+      401:
+        body:
+          application/json:
+            example:
+              message: Auth failed.Retry.
+    
+  
+  server_failed_status:
+    responses:
+      500:
+        body:
+          application/json:
+            example:
+              message: Internal server error.Retry.
+
+/customers:
+  is: [cust_auth,auth_failed_status,server_failed_status] 
+  get:
+    headers:
+    queryParameters:
+      city:
+        required: true
+        type: string
+        example: Pune
+        minLength: 3
+        maxLength: 100
+    responses:
+      200:
+        headers:
+          comtent-Type:
+        body:
+          application/json:
+            #examples: !include examples/CustomersExample.raml
+            type: Customer[]
+          application/xml:
+            #examples: !include examples/CustomersExample.raml
+            type: Customer[]
+  post:
+    headers:
+    body:
+      application/json:
+        #examples: !include examples/CustomerExample.raml
+        type: Customer
+    responses:
+      201:
+        headers:
+          comtent-Type:
+        body:
+          application/json:
+            example: Customer added
+            
+  /{customer_id}:
+    is: [cust_auth,auth_failed_status,server_failed_status]
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              #examples: !include examples/CustomerExample.raml
+              type: Customer
+    put:
+      body:
+        application/json:
+          #examples: !include examples/CustomerExample.raml
+          type: Customer
+      responses:
+        200:
+          body:
+            application/json:
+              example: 
+                message: Customer updated.
+    delete:
+      body:
+        application/json:
+          #examples: !include examples/CustomerExample.raml
+          type: Customer
+      responses:
+        200:
+          body:
+            application/json:
+              example: 
+                message: Customer deleted.
